@@ -10,6 +10,9 @@
     if (!force && findInCurrent({ media, episode })) return
     rss.set({ media, episode })
   }
+  export function closeAnime () {
+    rss.set(null)
+  }
 </script>
 
 <script>

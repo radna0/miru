@@ -1,6 +1,6 @@
 {
   "name": "Miru",
-  "version": "5.2.5",
+  "version": "5.2.3",
   "private": true,
   "author": "ThaUnknown_ <ThaUnknown@users.noreply.github.com>",
   "description": "Stream anime torrents, real-time with no waiting for downloads.",
@@ -26,6 +26,10 @@
   },
   "dependencies": {
     "@paymoapp/electron-shutdown-handler": "^1.1.2",
+    "electron-dl": "^4.0.0",
+    "fs": "0.0.1-security",
+    "json-parse-even-better-errors": "^3.0.2",
+    "path": "^0.12.7",
     "utp-native": "^2.5.3"
   },
   "standard": {

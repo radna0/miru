@@ -1,90 +1,100 @@
 <script>
-  import { settings } from '@/modules/settings.js'
-  import { getAnimeProgress, setAnimeProgress } from '@/modules/animeprogress.js'
-  import { playAnime } from '@/views/TorrentSearch/TorrentModal.svelte'
-  import { client } from '@/modules/torrent.js'
-  import { createEventDispatcher } from 'svelte'
-  import { anilistClient } from '@/modules/anilist.js'
-  import Subtitles from '@/modules/subtitles.js'
-  import { toTS, fastPrettyBytes, videoRx } from '@/modules/util.js'
-  import { toast } from 'svelte-sonner'
-  import { getChaptersAniSkip } from '@/modules/anime.js'
-  import Seekbar from 'perfect-seekbar'
-  import { click } from '@/modules/click.js'
-  import VideoDeband from 'video-deband'
+  import { settings } from '@/modules/settings.js';
+  import {
+    getAnimeProgress,
+    setAnimeProgress,
+  } from '@/modules/animeprogress.js';
+  import { playAnime } from '@/views/TorrentSearch/TorrentModal.svelte';
+  import { client } from '@/modules/torrent.js';
+  import { createEventDispatcher } from 'svelte';
+  import { anilistClient } from '@/modules/anilist.js';
+  import Subtitles from '@/modules/subtitles.js';
+  import { toTS, fastPrettyBytes, videoRx } from '@/modules/util.js';
+  import { toast } from 'svelte-sonner';
+  import { getChaptersAniSkip } from '@/modules/anime.js';
+  import Seekbar from 'perfect-seekbar';
+  import { click } from '@/modules/click.js';
+  import VideoDeband from 'video-deband';
+  import { getContext } from 'svelte';
+  import { w2gEmitter, state } from '../WatchTogether/WatchTogether.svelte';
+  import Keybinds, { loadWithDefaults, condition } from 'svelte-keybinds';
+  import { SUPPORTS } from '@/modules/support.js';
+  import 'rvfc-polyfill';
+  import IPC from '@/modules/ipc.js';
 
-  import { w2gEmitter, state } from '../WatchTogether/WatchTogether.svelte'
-  import Keybinds, { loadWithDefaults, condition } from 'svelte-keybinds'
-  import { SUPPORTS } from '@/modules/support.js'
-  import 'rvfc-polyfill'
-  import IPC from '@/modules/ipc.js'
-
-  const emit = createEventDispatcher()
+  const emit = createEventDispatcher();
 
   w2gEmitter.on('playerupdate', ({ detail }) => {
-    currentTime = detail.time
-    paused = detail.paused
-  })
+    currentTime = detail.time;
+    paused = detail.paused;
+  });
 
   w2gEmitter.on('setindex', ({ detail }) => {
-    playFile(detail)
-  })
+    playFile(detail);
+  });
 
-  export function playFile (file) {
+  export function playFile(file) {
     if (!isNaN(file)) {
-      handleCurrent(videos?.[file])
+      handleCurrent(videos?.[file]);
     } else {
-      handleCurrent(file)
+      handleCurrent(file);
     }
   }
 
-  function updatew2g () {
-    w2gEmitter.emit('player', { time: Math.floor(currentTime), paused })
+  function updatew2g() {
+    w2gEmitter.emit('player', { time: Math.floor(currentTime), paused });
   }
 
-  export let miniplayer = false
-  $condition = () => !miniplayer && SUPPORTS.keybinds && !document.querySelector('.modal.show')
-  export let page
-  export let files = []
-  $: updateFiles(files)
-  let src = null
-  let video = null
-  let container = null
-  let current = null
-  let subs = null
-  let duration = 0.1
-  let paused = true
-  let muted = false
-  let wasPaused = null
-  let videos = []
-  let immersed = false
-  let buffering = false
-  let immerseTimeout = null
-  let bufferTimeout = null
-  let subHeaders = null
-  let pip = false
-  const presentationRequest = null
-  const presentationConnection = null
-  const canCast = false
-  let isFullscreen = false
-  let ended = false
-  let volume = Number(localStorage.getItem('volume')) || 1
-  let playbackRate = 1
-  $: localStorage.setItem('volume', (volume || 0).toString())
-  $: safeduration = (isFinite(duration) ? duration : currentTime) || 0
+  const best_episodes_release = getContext('best_episodes_release');
+  export let miniplayer = false;
+  $condition = () =>
+    !miniplayer && SUPPORTS.keybinds && !document.querySelector('.modal.show');
+  export let page;
+  export let files = [];
+  $: updateFiles(files);
+  let src = null;
+  let video = null;
+  let container = null;
+  let current = null;
+  let subs = null;
+  let duration = 0.1;
+  let paused = true;
+  let muted = true;
+  let wasPaused = null;
+  let videos = [];
+  let immersed = false;
+  let buffering = false;
+  let immerseTimeout = null;
+  let bufferTimeout = null;
+  let subHeaders = null;
+  let pip = false;
+  const presentationRequest = null;
+  const presentationConnection = null;
+  const canCast = false;
+  let isFullscreen = false;
+  let ended = false;
+  let volume = Number(localStorage.getItem('volume')) || 1;
+  let playbackRate = 1;
+  $: localStorage.setItem('volume', (volume || 0).toString());
+  $: safeduration = (isFinite(duration) ? duration : currentTime) || 0;
 
-  function checkAudio () {
+  function checkAudio() {
     if ('audioTracks' in HTMLVideoElement.prototype) {
       if (!video.audioTracks.length) {
         toast.error('Audio Codec Unsupported', {
-          description: "This torrent's audio codec is not supported, try a different release by disabling Autoplay Torrents in RSS settings."
-        })
+          description:
+            "This torrent's audio codec is not supported, try a different release by disabling Autoplay Torrents in RSS settings.",
+        });
       } else if (video.audioTracks.length > 1) {
-        const preferredTrack = [...video.audioTracks].find(({ language }) => language === $settings.audioLanguage)
-        if (preferredTrack) return selectAudio(preferredTrack.id)
+        const preferredTrack = [...video.audioTracks].find(
+          ({ language }) => language === $settings.audioLanguage
+        );
+        if (preferredTrack) return selectAudio(preferredTrack.id);
 
-        const japaneseTrack = [...video.audioTracks].find(({ language }) => language === 'jpn')
-        if (japaneseTrack) return selectAudio(japaneseTrack.id)
+        const japaneseTrack = [...video.audioTracks].find(
+          ({ language }) => language === 'jpn'
+        );
+        if (japaneseTrack) return selectAudio(japaneseTrack.id);
       }
     }
   }
@@ -104,527 +114,613 @@
 
   // document.fullscreenElement isn't reactive
   document.addEventListener('fullscreenchange', () => {
-    isFullscreen = !!document.fullscreenElement
+    isFullscreen = !!document.fullscreenElement;
     if (document.fullscreenElement) {
-      screen.orientation.lock('landscape')
+      screen.orientation.lock('landscape');
     } else {
-      screen.orientation.unlock()
+      screen.orientation.unlock();
     }
-  })
+  });
 
-  function handleHeaders () {
-    subHeaders = subs?.headers
+  function handleHeaders() {
+    subHeaders = subs?.headers;
   }
 
-  function updateFiles (files) {
+  function updateFiles(files) {
     if (files?.length) {
-      videos = files.filter(file => videoRx.test(file.name))
+      videos = files.filter((file) => videoRx.test(file.name));
       if (videos?.length) {
         if (subs) {
-          subs.files = files || []
+          subs.files = files || [];
         }
       }
     } else {
-      src = ''
-      currentTime = 0
-      targetTime = 0
+      src = '';
+      currentTime = 0;
+      targetTime = 0;
     }
   }
 
-  let loadInterval
+  let loadInterval;
 
-  function clearLoadInterval () {
-    clearInterval(loadInterval)
+  function clearLoadInterval() {
+    clearInterval(loadInterval);
   }
   /**
    * @type {VideoDeband}
    */
-  let deband
+  let deband;
 
-  function loadDeband (load, video) {
-    if (!video) return
+  function loadDeband(load, video) {
+    if (!video) return;
     if (load && !deband) {
-      deband = new VideoDeband(video)
-      deband.canvas.classList.add('deband-canvas')
-      video.before(deband.canvas)
+      deband = new VideoDeband(video);
+      deband.canvas.classList.add('deband-canvas');
+      video.before(deband.canvas);
     } else if (!load && deband) {
-      deband.destroy()
-      deband.canvas.remove()
-      deband = null
+      deband.destroy();
+      deband.canvas.remove();
+      deband = null;
     }
   }
-  $: loadDeband($settings.playerDeband, video)
+  $: loadDeband($settings.playerDeband, video);
 
-  let watchedListener
+  let watchedListener;
 
-  async function handleCurrent (file) {
+  async function handleCurrent(file) {
     if (file) {
-      if (thumbnailData.video?.src) URL.revokeObjectURL(video?.src)
+      if (thumbnailData.video?.src) URL.revokeObjectURL(video?.src);
       Object.assign(thumbnailData, {
         thumbnails: [],
         interval: undefined,
-        video: undefined
-      })
-      currentTime = 0
-      targetTime = 0
-      chapters = []
-      currentSkippable = null
-      completed = false
+        video: undefined,
+      });
+      currentTime = 0;
+      targetTime = 0;
+      chapters = [];
+      currentSkippable = null;
+      completed = false;
       if (subs) {
-        subs.destroy()
-        subs = null
+        subs.destroy();
+        subs = null;
       }
-      current = file
+      current = file;
       if (!settings.value.enableExternal) {
-        src = file.url
-        subs = new Subtitles(video, files, current, handleHeaders)
-        video.load()
-        await loadAnimeProgress()
+        src = file.url;
+        subs = new Subtitles(video, files, current, handleHeaders);
+        video.load();
+        await loadAnimeProgress();
       } else if (current.media?.media?.duration) {
-        const duration = current.media?.media?.duration
-        client.removeEventListener('externalWatched', watchedListener)
+        const duration = current.media?.media?.duration;
+        client.removeEventListener('externalWatched', watchedListener);
         watchedListener = ({ detail }) => {
-          checkCompletionByTime(detail, duration)
-        }
-        client.on('externalWatched', watchedListener)
+          checkCompletionByTime(detail, duration);
+        };
+        client.on('externalWatched', watchedListener);
       }
-      emit('current', current)
-      client.send('current', { current: file, external: settings.value.enableExternal })
+      emit('current', current);
+      best_episodes_release.update((current) => {
+        if (current === undefined) current = {};
+        const { episode, media } = file.media;
+        if (!episode) return current;
+        const hash = `${media.id}-${media.idMal}-${episode}`;
+
+        if (!(hash in current)) {
+          var current_format = file.url.substr(file.url.lastIndexOf('.') + 1);
+          const savePath = `F:\\Isekai Torrent\\Downloads\\${hash}${current_format}`;
+          file.savePath = savePath;
+
+          current[hash] = file;
+          // use file.url to download media
+        }
+        return current;
+      });
+
+      client.send('current', {
+        current: file,
+        external: settings.value.enableExternal,
+      });
     }
   }
 
-  export let media
+  export let media;
 
-  $: checkAvail(current)
-  let hasNext = false
-  let hasLast = false
-  function checkAvail (current) {
-    if ((media?.media?.nextAiringEpisode?.episode - 1 || media?.media?.episodes) > media?.episode) {
-      hasNext = true
+  $: checkAvail(current);
+  let hasNext = false;
+  let hasLast = false;
+  function checkAvail(current) {
+    if (
+      (media?.media?.nextAiringEpisode?.episode - 1 || media?.media?.episodes) >
+      media?.episode
+    ) {
+      hasNext = true;
     } else if (videos.indexOf(current) !== videos.length - 1) {
-      hasNext = true
+      hasNext = true;
     } else {
-      hasNext = false
+      hasNext = false;
     }
     if (media?.episode > 1) {
-      hasLast = true
+      hasLast = true;
     } else if (videos.indexOf(current) > 0) {
-      hasLast = true
+      hasLast = true;
     } else {
-      hasLast = false
+      hasLast = false;
     }
   }
 
-  async function loadAnimeProgress () {
-    if (!current?.media?.media?.id || !current?.media?.episode || current?.media?.failed || !media?.media?.id || !media?.episode) return
+  async function loadAnimeProgress() {
+    if (
+      !current?.media?.media?.id ||
+      !current?.media?.episode ||
+      current?.media?.failed ||
+      !media?.media?.id ||
+      !media?.episode
+    )
+      return;
 
-    const animeProgress = await getAnimeProgress(current.media.media.id, current.media.episode)
-    if (!animeProgress) return
+    const animeProgress = await getAnimeProgress(
+      current.media.media.id,
+      current.media.episode
+    );
+    if (!animeProgress) return;
 
-    const currentTime = Math.max(animeProgress.currentTime - 5, 0) // Load 5 seconds before
-    seek(currentTime - video.currentTime)
+    const currentTime = Math.max(animeProgress.currentTime - 5, 0); // Load 5 seconds before
+    seek(currentTime - video.currentTime);
   }
 
-  function saveAnimeProgress () {
-    if (!current?.media?.media?.id || !current?.media?.episode || current?.media?.failed || !media?.media?.id || !media?.episode) return
+  function saveAnimeProgress() {
+    if (
+      !current?.media?.media?.id ||
+      !current?.media?.episode ||
+      current?.media?.failed ||
+      !media?.media?.id ||
+      !media?.episode
+    )
+      return;
 
-    if (buffering || paused || video.readyState < 4) return
+    if (buffering || paused || video.readyState < 4) return;
 
-    setAnimeProgress({ mediaId: current.media.media.id, episode: current.media.episode, currentTime: video.currentTime, safeduration })
+    setAnimeProgress({
+      mediaId: current.media.media.id,
+      episode: current.media.episode,
+      currentTime: video.currentTime,
+      safeduration,
+    });
   }
-  setInterval(saveAnimeProgress, 30000)
+  setInterval(saveAnimeProgress, 30000);
 
-  function cycleSubtitles () {
+  function cycleSubtitles() {
     if (current && subs?.headers) {
-      const tracks = subs.headers.filter(header => header)
-      const index = tracks.indexOf(subs.headers[subs.current]) + 1
-      subs.selectCaptions(index >= tracks.length ? -1 : subs.headers.indexOf(tracks[index]))
+      const tracks = subs.headers.filter((header) => header);
+      const index = tracks.indexOf(subs.headers[subs.current]) + 1;
+      subs.selectCaptions(
+        index >= tracks.length ? -1 : subs.headers.indexOf(tracks[index])
+      );
     }
   }
 
-  let subDelay = 0
-  $: updateDelay(subDelay)
-  function updateDelay (delay) {
-    if (subs?.renderer) subs.renderer.timeOffset = Number(delay)
+  let subDelay = 0;
+  $: updateDelay(subDelay);
+  function updateDelay(delay) {
+    if (subs?.renderer) subs.renderer.timeOffset = Number(delay);
   }
 
-  let currentTime = 0
-  $: progress = currentTime / safeduration * 100
-  $: targetTime = (!paused && currentTime) || targetTime
-  function handleMouseDown ({ detail }) {
+  let currentTime = 0;
+  $: progress = (currentTime / safeduration) * 100;
+  $: targetTime = (!paused && currentTime) || targetTime;
+  function handleMouseDown({ detail }) {
     if (wasPaused == null) {
-      wasPaused = paused
-      paused = true
+      wasPaused = paused;
+      paused = true;
     }
-    targetTime = detail / 100 * safeduration
+    targetTime = (detail / 100) * safeduration;
   }
-  function handleMouseUp () {
-    paused = wasPaused
-    wasPaused = null
-    currentTime = targetTime
+  function handleMouseUp() {
+    paused = wasPaused;
+    wasPaused = null;
+    currentTime = targetTime;
   }
 
-  function autoPlay () {
+  function autoPlay() {
     if (!miniplayer) {
-      video.play()
+      video.play();
     } else {
-      video.pause()
+      video.pause();
     }
   }
-  function playPause () {
-    paused = !paused
-    resetImmerse()
+  function playPause() {
+    paused = !paused;
+    resetImmerse();
   }
-  function toggleMute () {
-    muted = !muted
+  function toggleMute() {
+    muted = !muted;
   }
-  const handleVisibility = visibility => {
+  const handleVisibility = (visibility) => {
     if (!video?.ended && $settings.playerPause && !pip) {
       if (visibility === 'hidden') {
-        visibilityPaused = paused
-        paused = true
+        visibilityPaused = paused;
+        paused = true;
       } else {
-        if (!visibilityPaused) paused = false
+        if (!visibilityPaused) paused = false;
       }
     }
+  };
+  let visibilityPaused = true;
+  document.addEventListener('visibilitychange', () =>
+    handleVisibility(document.visibilityState)
+  );
+  IPC.on('visibilitychange', handleVisibility);
+  function tryPlayNext() {
+    if ($settings.playerAutoplay && !state.value) playNext();
   }
-  let visibilityPaused = true
-  document.addEventListener('visibilitychange', () => handleVisibility(document.visibilityState))
-  IPC.on('visibilitychange', handleVisibility)
-  function tryPlayNext () {
-    if ($settings.playerAutoplay && !state.value) playNext()
-  }
-  function playNext () {
+  function playNext() {
     if (hasNext) {
-      const index = videos.indexOf(current)
+      const index = videos.indexOf(current);
       if (index + 1 < videos.length) {
-        const target = (index + 1) % videos.length
-        handleCurrent(videos[target])
-        w2gEmitter.emit('index', { index: target })
-      } else if (media?.media?.nextAiringEpisode?.episode - 1 || media?.media?.episodes > media?.episode) {
-        playAnime(media.media, media.episode + 1)
+        const target = (index + 1) % videos.length;
+        handleCurrent(videos[target]);
+        w2gEmitter.emit('index', { index: target });
+      } else if (
+        media?.media?.nextAiringEpisode?.episode - 1 ||
+        media?.media?.episodes > media?.episode
+      ) {
+        playAnime(media.media, media.episode + 1);
       }
     }
   }
-  function playLast () {
+  function playLast() {
     if (hasLast) {
-      const index = videos.indexOf(current)
+      const index = videos.indexOf(current);
       if (index > 0) {
-        handleCurrent(videos[index - 1])
-        w2gEmitter.emit('index', { index: index - 1 })
+        handleCurrent(videos[index - 1]);
+        w2gEmitter.emit('index', { index: index - 1 });
       } else if (media?.episode > 1) {
-        playAnime(media.media, media.episode - 1)
+        playAnime(media.media, media.episode - 1);
       }
     }
   }
-  function toggleFullscreen () {
-    document.fullscreenElement ? document.exitFullscreen() : document.querySelector('.content-wrapper').requestFullscreen()
+  function toggleFullscreen() {
+    document.fullscreenElement
+      ? document.exitFullscreen()
+      : document.querySelector('.content-wrapper').requestFullscreen();
   }
-  function skip () {
-    const current = findChapter(currentTime)
+  function skip() {
+    const current = findChapter(currentTime);
     if (current) {
-      if (!isChapterSkippable(current) && ((current.end - current.start) / 1000) > 100) {
-        currentTime = currentTime + 85
+      if (
+        !isChapterSkippable(current) &&
+        (current.end - current.start) / 1000 > 100
+      ) {
+        currentTime = currentTime + 85;
       } else {
-        const endtime = current.end / 1000
-        if ((safeduration - endtime | 0) === 0) return playNext()
-        currentTime = endtime
-        currentSkippable = null
+        const endtime = current.end / 1000;
+        if (((safeduration - endtime) | 0) === 0) return playNext();
+        currentTime = endtime;
+        currentSkippable = null;
       }
     } else if (currentTime < 10) {
-      currentTime = 90
+      currentTime = 90;
     } else if (safeduration - currentTime < 90) {
-      currentTime = safeduration
+      currentTime = safeduration;
     } else {
-      currentTime = currentTime + 85
+      currentTime = currentTime + 85;
     }
-    targetTime = currentTime
-    video.currentTime = targetTime
+    targetTime = currentTime;
+    video.currentTime = targetTime;
   }
-  function seek (time) {
-    currentTime = currentTime + time
-    targetTime = currentTime
-    video.currentTime = targetTime
+  function seek(time) {
+    currentTime = currentTime + time;
+    targetTime = currentTime;
+    video.currentTime = targetTime;
   }
-  function forward () {
-    seek(2)
+  function forward() {
+    seek(2);
   }
-  function rewind () {
-    seek(-2)
+  function rewind() {
+    seek(-2);
   }
-  function selectAudio (id) {
+  function selectAudio(id) {
     if (id !== undefined) {
       for (const track of video.audioTracks) {
-        track.enabled = track.id === id
+        track.enabled = track.id === id;
       }
-      seek(-0.2) // stupid fix because video freezes up when chaging tracks
+      seek(-0.2); // stupid fix because video freezes up when chaging tracks
     }
   }
-  function selectVideo (id) {
+  function selectVideo(id) {
     if (id !== undefined) {
       for (const track of video.videoTracks) {
-        track.selected = track.id === id
+        track.selected = track.id === id;
       }
-      setTimeout(() => subs?.renderer?.resize(), 200) // stupid fix because video metadata doesnt update for multiple frames
+      setTimeout(() => subs?.renderer?.resize(), 200); // stupid fix because video metadata doesnt update for multiple frames
     }
   }
-  function toggleCast () {
+  function toggleCast() {
     if (video.readyState) {
       if (presentationConnection) {
-        presentationConnection?.terminate()
+        presentationConnection?.terminate();
       } else {
-        presentationRequest.start()
+        presentationRequest.start();
       }
     }
   }
-  async function screenshot () {
+  async function screenshot() {
     if ('clipboard' in navigator) {
-      const canvas = document.createElement('canvas')
-      const context = canvas.getContext('2d')
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-      context.drawImage(video, 0, 0)
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      context.drawImage(video, 0, 0);
       if (subs?.renderer) {
-        subs.renderer.resize(video.videoWidth, video.videoHeight)
-        await new Promise(resolve => setTimeout(resolve, 500)) // this is hacky, but TLDR wait for canvas to update and re-render, in practice this will take at MOST 100ms, but just to be safe
-        context.drawImage(subs.renderer._canvas, 0, 0, canvas.width, canvas.height)
-        subs.renderer.resize(0, 0, 0, 0) // undo resize
+        subs.renderer.resize(video.videoWidth, video.videoHeight);
+        await new Promise((resolve) => setTimeout(resolve, 500)); // this is hacky, but TLDR wait for canvas to update and re-render, in practice this will take at MOST 100ms, but just to be safe
+        context.drawImage(
+          subs.renderer._canvas,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+        subs.renderer.resize(0, 0, 0, 0); // undo resize
       }
-      const blob = await new Promise(resolve => canvas.toBlob(resolve))
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve));
       await navigator.clipboard.write([
         new ClipboardItem({
-          [blob.type]: blob
-        })
-      ])
-      canvas.remove()
+          [blob.type]: blob,
+        }),
+      ]);
+      canvas.remove();
       toast.success('Screenshot', {
-        description: 'Saved screenshot to clipboard.'
-      })
+        description: 'Saved screenshot to clipboard.',
+      });
     }
   }
-  function updatePiPState (paused) {
-    const element = /** @type {HTMLVideoElement | undefined} */ (document.pictureInPictureElement)
-    if (!element || element.id) return
-    if (paused) element.pause()
-    else element.play()
+  function updatePiPState(paused) {
+    const element = /** @type {HTMLVideoElement | undefined} */ (
+      document.pictureInPictureElement
+    );
+    if (!element || element.id) return;
+    if (paused) element.pause();
+    else element.play();
   }
-  $: updatePiPState(paused)
-  function togglePopout () {
+  $: updatePiPState(paused);
+  function togglePopout() {
     if (video.readyState) {
       if (!subs?.renderer) {
         if (video !== document.pictureInPictureElement) {
-          video.requestPictureInPicture()
-          resetImmerse()
-          pip = true
+          video.requestPictureInPicture();
+          resetImmerse();
+          pip = true;
         } else {
-          document.exitPictureInPicture()
-          pip = false
+          document.exitPictureInPicture();
+          pip = false;
         }
       } else {
-        if (document.pictureInPictureElement && !document.pictureInPictureElement.id) {
+        if (
+          document.pictureInPictureElement &&
+          !document.pictureInPictureElement.id
+        ) {
           // only exit if pip is the custom one, else overwrite existing pip with custom
-          document.exitPictureInPicture()
-          pip = false
+          document.exitPictureInPicture();
+          pip = false;
         } else {
-          const canvasVideo = document.createElement('video')
-          const { stream, destroy } = getBurnIn()
+          const canvasVideo = document.createElement('video');
+          const { stream, destroy } = getBurnIn();
           const cleanup = () => {
-            pip = false
-            destroy()
-            canvasVideo.remove()
-          }
-          pip = true
-          resetImmerse()
-          canvasVideo.srcObject = stream
+            pip = false;
+            destroy();
+            canvasVideo.remove();
+          };
+          pip = true;
+          resetImmerse();
+          canvasVideo.srcObject = stream;
           canvasVideo.onloadedmetadata = () => {
-            canvasVideo.play()
+            canvasVideo.play();
             if (pip) {
-              canvasVideo.requestPictureInPicture().then(pipwindow => {
-                pipwindow.onresize = () => {
-                  const { width, height } = pipwindow
-                  if (isNaN(width) || isNaN(height)) return
-                  if (!isFinite(width) || !isFinite(height)) return
-                  subs.renderer.resize(width, height)
-                }
-              }).catch(e => {
-                cleanup()
-                console.warn('Failed To Burn In Subtitles ' + e)
-              })
+              canvasVideo
+                .requestPictureInPicture()
+                .then((pipwindow) => {
+                  pipwindow.onresize = () => {
+                    const { width, height } = pipwindow;
+                    if (isNaN(width) || isNaN(height)) return;
+                    if (!isFinite(width) || !isFinite(height)) return;
+                    subs.renderer.resize(width, height);
+                  };
+                })
+                .catch((e) => {
+                  cleanup();
+                  console.warn('Failed To Burn In Subtitles ' + e);
+                });
             } else {
-              cleanup()
+              cleanup();
             }
-          }
-          canvasVideo.onleavepictureinpicture = cleanup
+          };
+          canvasVideo.onleavepictureinpicture = cleanup;
         }
       }
     }
   }
-  let fitWidth = false
-  let showKeybinds = false
+  let fitWidth = false;
+  let showKeybinds = false;
   loadWithDefaults({
     KeyX: {
       fn: () => screenshot(),
       id: 'screenshot_monitor',
       type: 'icon',
-      desc: 'Save Screenshot to Clipboard'
+      desc: 'Save Screenshot to Clipboard',
     },
     KeyI: {
       fn: () => toggleStats(),
       id: 'list',
       type: 'icon',
-      desc: 'Toggle Stats'
+      desc: 'Toggle Stats',
     },
     Backquote: {
       fn: () => (showKeybinds = !showKeybinds),
       id: 'help_outline',
       type: 'icon',
-      desc: 'Toggle Keybinds'
+      desc: 'Toggle Keybinds',
     },
     Space: {
       fn: () => playPause(),
       id: 'play_arrow',
       type: 'icon',
-      desc: 'Play/Pause'
+      desc: 'Play/Pause',
     },
     KeyN: {
       fn: () => playNext(),
       id: 'skip_next',
       type: 'icon',
-      desc: 'Next Episode'
+      desc: 'Next Episode',
     },
     KeyB: {
       fn: () => playLast(),
       id: 'skip_previous',
       type: 'icon',
-      desc: 'Previous Episode'
+      desc: 'Previous Episode',
     },
     KeyA: {
       fn: () => {
-        $settings.playerDeband = !$settings.playerDeband
+        $settings.playerDeband = !$settings.playerDeband;
       },
       id: 'deblur',
       type: 'icon',
-      desc: 'Toggle Video Debanding'
+      desc: 'Toggle Video Debanding',
     },
     KeyM: {
       fn: () => (muted = !muted),
       id: 'volume_off',
       type: 'icon',
-      desc: 'Toggle Mute'
+      desc: 'Toggle Mute',
     },
     KeyP: {
       fn: () => togglePopout(),
       id: 'picture_in_picture',
       type: 'icon',
-      desc: 'Toggle Picture in Picture'
+      desc: 'Toggle Picture in Picture',
     },
     KeyF: {
       fn: () => toggleFullscreen(),
       id: 'fullscreen',
       type: 'icon',
-      desc: 'Toggle Fullscreen'
+      desc: 'Toggle Fullscreen',
     },
     KeyS: {
       fn: () => skip(),
       id: '+90',
-      desc: 'Skip Intro/90s'
+      desc: 'Skip Intro/90s',
     },
     KeyW: {
-      fn: () => { fitWidth = !fitWidth },
+      fn: () => {
+        fitWidth = !fitWidth;
+      },
       id: 'fit_width',
       type: 'icon',
-      desc: 'Toggle Video Cover'
+      desc: 'Toggle Video Cover',
     },
     KeyD: {
       fn: () => toggleCast(),
       id: 'cast',
       type: 'icon',
-      desc: 'Toggle Cast [broken]'
+      desc: 'Toggle Cast [broken]',
     },
     KeyC: {
       fn: () => cycleSubtitles(),
       id: 'subtitles',
       type: 'icon',
-      desc: 'Cycle Subtitles'
+      desc: 'Cycle Subtitles',
     },
     ArrowLeft: {
-      fn: e => {
-        e.stopImmediatePropagation()
-        e.preventDefault()
-        rewind()
+      fn: (e) => {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        rewind();
       },
       id: '-2',
-      desc: 'Rewind 2s'
+      desc: 'Rewind 2s',
     },
     ArrowRight: {
-      fn: e => {
-        e.stopImmediatePropagation()
-        e.preventDefault()
-        forward()
+      fn: (e) => {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        forward();
       },
       id: '+2',
-      desc: 'Seek 2s'
+      desc: 'Seek 2s',
     },
     ArrowUp: {
-      fn: e => {
-        e.stopImmediatePropagation()
-        e.preventDefault()
-        volume = Math.min(1, volume + 0.05)
+      fn: (e) => {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        volume = Math.min(1, volume + 0.05);
       },
       id: 'volume_up',
       type: 'icon',
-      desc: 'Volume Up'
+      desc: 'Volume Up',
     },
     ArrowDown: {
-      fn: e => {
-        e.stopImmediatePropagation()
-        e.preventDefault()
-        volume = Math.max(0, volume - 0.05)
+      fn: (e) => {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        volume = Math.max(0, volume - 0.05);
       },
       id: 'volume_down',
       type: 'icon',
-      desc: 'Volume Down'
+      desc: 'Volume Down',
     },
     BracketLeft: {
-      fn: () => { playbackRate = video.defaultPlaybackRate -= 0.1 },
+      fn: () => {
+        playbackRate = video.defaultPlaybackRate -= 0.1;
+      },
       id: 'history',
       type: 'icon',
-      desc: 'Decrease Playback Rate'
+      desc: 'Decrease Playback Rate',
     },
     BracketRight: {
-      fn: () => { playbackRate = video.defaultPlaybackRate += 0.1 },
+      fn: () => {
+        playbackRate = video.defaultPlaybackRate += 0.1;
+      },
       id: 'update',
       type: 'icon',
-      desc: 'Increase Playback Rate'
+      desc: 'Increase Playback Rate',
     },
     Backslash: {
-      fn: () => { playbackRate = video.defaultPlaybackRate = 1 },
+      fn: () => {
+        playbackRate = video.defaultPlaybackRate = 1;
+      },
       id: 'schedule',
       type: 'icon',
-      desc: 'Reset Playback Rate'
-    }
-  })
+      desc: 'Reset Playback Rate',
+    },
+  });
 
-  function getBurnIn (noSubs) {
-    const canvas = document.createElement('canvas')
-    const context = canvas.getContext('2d')
-    let loop = null
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    if (!noSubs) subs.renderer.resize(video.videoWidth, video.videoHeight)
+  function getBurnIn(noSubs) {
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    let loop = null;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    if (!noSubs) subs.renderer.resize(video.videoWidth, video.videoHeight);
     const renderFrame = () => {
-      context.drawImage(deband ? deband.canvas : video, 0, 0)
-      if (!noSubs && canvas.width && canvas.height) context.drawImage(subs.renderer?._canvas, 0, 0, canvas.width, canvas.height)
-      loop = video.requestVideoFrameCallback(renderFrame)
-    }
-    renderFrame()
+      context.drawImage(deband ? deband.canvas : video, 0, 0);
+      if (!noSubs && canvas.width && canvas.height)
+        context.drawImage(
+          subs.renderer?._canvas,
+          0,
+          0,
+          canvas.width,
+          canvas.height
+        );
+      loop = video.requestVideoFrameCallback(renderFrame);
+    };
+    renderFrame();
     const destroy = () => {
-      if (!noSubs) subs.renderer.resize()
-      video.cancelVideoFrameCallback(loop)
-      canvas.remove()
-    }
-    container.append(canvas)
-    return { stream: canvas.captureStream(), destroy }
+      if (!noSubs) subs.renderer.resize();
+      video.cancelVideoFrameCallback(loop);
+      canvas.remove();
+    };
+    container.append(canvas);
+    return { stream: canvas.captureStream(), destroy };
   }
 
   // function initCast (event) {
@@ -684,68 +780,70 @@
   //   }
   // }
 
-  function immersePlayer () {
-    immersed = true
-    immerseTimeout = undefined
+  function immersePlayer() {
+    immersed = true;
+    immerseTimeout = undefined;
   }
 
-  function resetImmerse () {
-    clearTimeout(immerseTimeout)
-    immersed = false
-    immerseTimeout = setTimeout(immersePlayer, (paused ? 5 : 1) * 1000)
+  function resetImmerse() {
+    clearTimeout(immerseTimeout);
+    immersed = false;
+    immerseTimeout = setTimeout(immersePlayer, (paused ? 5 : 1) * 1000);
   }
 
-  function toggleImmerse () {
-    clearTimeout(immerseTimeout)
-    immersed = !immersed
+  function toggleImmerse() {
+    clearTimeout(immerseTimeout);
+    immersed = !immersed;
   }
 
-  function hideBuffering () {
+  function hideBuffering() {
     if (bufferTimeout) {
-      clearTimeout(bufferTimeout)
-      bufferTimeout = null
-      buffering = false
+      clearTimeout(bufferTimeout);
+      bufferTimeout = null;
+      buffering = false;
     }
   }
 
-  function showBuffering () {
+  function showBuffering() {
     bufferTimeout = setTimeout(() => {
-      buffering = true
-      resetImmerse()
-    }, 150)
+      buffering = true;
+      resetImmerse();
+    }, 150);
   }
   $: navigator.mediaSession?.setPositionState({
     duration: Math.max(0, safeduration || 0),
     playbackRate: 1,
-    position: Math.max(0, Math.min(safeduration || 0, currentTime || 0))
-  })
+    position: Math.max(0, Math.min(safeduration || 0, currentTime || 0)),
+  });
 
   if ('mediaSession' in navigator) {
-    navigator.mediaSession.setActionHandler('play', playPause)
-    navigator.mediaSession.setActionHandler('pause', playPause)
-    navigator.mediaSession.setActionHandler('nexttrack', playNext)
-    navigator.mediaSession.setActionHandler('previoustrack', playLast)
-    navigator.mediaSession.setActionHandler('seekforward', forward)
-    navigator.mediaSession.setActionHandler('seekbackward', rewind)
+    navigator.mediaSession.setActionHandler('play', playPause);
+    navigator.mediaSession.setActionHandler('pause', playPause);
+    navigator.mediaSession.setActionHandler('nexttrack', playNext);
+    navigator.mediaSession.setActionHandler('previoustrack', playLast);
+    navigator.mediaSession.setActionHandler('seekforward', forward);
+    navigator.mediaSession.setActionHandler('seekbackward', rewind);
   }
-  let stats = null
-  let requestCallback = null
-  function toggleStats () {
+  let stats = null;
+  let requestCallback = null;
+  function toggleStats() {
     if (requestCallback) {
-      stats = null
-      video.cancelVideoFrameCallback(requestCallback)
-      requestCallback = null
+      stats = null;
+      video.cancelVideoFrameCallback(requestCallback);
+      requestCallback = null;
     } else {
       requestCallback = video.requestVideoFrameCallback((a, b) => {
-        stats = {}
-        handleStats(a, b, b)
-      })
+        stats = {};
+        handleStats(a, b, b);
+      });
     }
   }
-  async function handleStats (now, metadata, lastmeta) {
+  async function handleStats(now, metadata, lastmeta) {
     if (stats) {
-      const msbf = (metadata.mediaTime - lastmeta.mediaTime) / (metadata.presentedFrames - lastmeta.presentedFrames)
-      const fps = (1 / msbf).toFixed(3)
+      const msbf =
+        (metadata.mediaTime - lastmeta.mediaTime) /
+        (metadata.presentedFrames - lastmeta.presentedFrames);
+      const fps = (1 / msbf).toFixed(3);
       stats = {
         fps,
         presented: metadata.presentedFrames,
@@ -754,113 +852,137 @@
         viewport: video.clientWidth + 'x' + video.clientHeight,
         resolution: videoWidth + 'x' + videoHeight,
         buffer: getBufferHealth(metadata.mediaTime) + ' s',
-        speed: video.playbackRate || 1
-      }
-      setTimeout(() => video.requestVideoFrameCallback((n, m) => handleStats(n, m, metadata)), 200)
+        speed: video.playbackRate || 1,
+      };
+      setTimeout(
+        () =>
+          video.requestVideoFrameCallback((n, m) =>
+            handleStats(n, m, metadata)
+          ),
+        200
+      );
     }
   }
-  function getBufferHealth (time) {
-    for (let index = video.buffered.length; index--;) {
-      if (time < video.buffered.end(index) && time >= video.buffered.start(index)) {
-        return (video.buffered.end(index) - time) | 0
+  function getBufferHealth(time) {
+    for (let index = video.buffered.length; index--; ) {
+      if (
+        time < video.buffered.end(index) &&
+        time >= video.buffered.start(index)
+      ) {
+        return (video.buffered.end(index) - time) | 0;
       }
     }
-    return 0
+    return 0;
   }
-  let buffer = 0
+  let buffer = 0;
   client.on('progress', ({ detail }) => {
-    buffer = detail * 100
-  })
+    buffer = detail * 100;
+  });
 
-  let chapters = []
+  let chapters = [];
   client.on('chapters', ({ detail }) => {
-    if (detail.length) chapters = detail
-  })
-  async function findChapters () {
+    if (detail.length) chapters = detail;
+  });
+  async function findChapters() {
     if (!chapters.length && current.media.media) {
-      chapters = await getChaptersAniSkip(current, safeduration)
+      chapters = await getChaptersAniSkip(current, safeduration);
     }
   }
 
-  let currentSkippable = null
-  function checkSkippableChapters () {
-    const current = findChapter(currentTime)
+  let currentSkippable = null;
+  function checkSkippableChapters() {
+    const current = findChapter(currentTime);
     if (current) {
-      currentSkippable = isChapterSkippable(current)
+      currentSkippable = isChapterSkippable(current);
     }
   }
   const skippableChaptersRx = [
-    ['Opening', /^op$|opening$|^ncop/mi],
-    ['Ending', /^ed$|ending$|^nced/mi],
-    ['Recap', /recap/mi]
-  ]
-  function isChapterSkippable (chapter) {
+    ['Opening', /^op$|opening$|^ncop/im],
+    ['Ending', /^ed$|ending$|^nced/im],
+    ['Recap', /recap/im],
+  ];
+  function isChapterSkippable(chapter) {
     for (const [name, regex] of skippableChaptersRx) {
       if (/** @type {RegExp} */ (regex).test(chapter.text)) {
-        return name
+        return name;
       }
     }
-    return null
+    return null;
   }
-  function findChapter (time) {
-    if (!chapters.length) return null
+  function findChapter(time) {
+    if (!chapters.length) return null;
     for (const chapter of chapters) {
-      if (time < (chapter.end / 1000) && time >= (chapter.start / 1000)) return chapter
+      if (time < chapter.end / 1000 && time >= chapter.start / 1000)
+        return chapter;
     }
   }
 
   // remaps chapters to what perfect-seekbar uses and adds potentially missing chapters
-  function sanitiseChapters (chapters, safeduration) {
-    if (!chapters?.length) return []
-    const sanitised = []
-    const first = chapters[0]
+  function sanitiseChapters(chapters, safeduration) {
+    if (!chapters?.length) return [];
+    const sanitised = [];
+    const first = chapters[0];
     if (first.start !== 0) {
-      sanitised.push({ size: Math.max(first.start, 0) / 10 / safeduration, end: undefined })
+      sanitised.push({
+        size: Math.max(first.start, 0) / 10 / safeduration,
+        end: undefined,
+      });
     }
     for (let { start, end, text } of chapters) {
-      if (start > safeduration * 1000) continue
-      if (end > safeduration * 1000) end = safeduration * 1000
+      if (start > safeduration * 1000) continue;
+      if (end > safeduration * 1000) end = safeduration * 1000;
       sanitised.push({
-        size: (end / 10 / safeduration) - (start / 10 / safeduration),
-        text
-      })
+        size: end / 10 / safeduration - start / 10 / safeduration,
+        text,
+      });
     }
-    const last = sanitised[sanitised.length - 1]
+    const last = sanitised[sanitised.length - 1];
     if (last.end !== safeduration) {
-      sanitised.push(100 - (last.end / 10 / safeduration))
+      sanitised.push(100 - last.end / 10 / safeduration);
     }
-    return sanitised
+    return sanitised;
   }
 
-  const thumbCanvas = document.createElement('canvas')
-  thumbCanvas.width = 200
+  const thumbCanvas = document.createElement('canvas');
+  thumbCanvas.width = 200;
   const thumbnailData = {
     thumbnails: [],
     canvas: thumbCanvas,
     context: thumbCanvas.getContext('2d'),
     interval: null,
-    video: null
-  }
+    video: null,
+  };
 
-  function getThumbnail (percent) {
-    return thumbnailData.thumbnails[Math.floor(percent / 100 * safeduration / thumbnailData.interval)] || ' '
+  function getThumbnail(percent) {
+    return (
+      thumbnailData.thumbnails[
+        Math.floor(((percent / 100) * safeduration) / thumbnailData.interval)
+      ] || ' '
+    );
   }
-  function createThumbnail (vid = video) {
+  function createThumbnail(vid = video) {
     if (vid?.readyState >= 2) {
-      const index = Math.floor(vid.currentTime / thumbnailData.interval)
+      const index = Math.floor(vid.currentTime / thumbnailData.interval);
       if (!thumbnailData.thumbnails[index]) {
-        thumbnailData.context.fillRect(0, 0, 200, thumbnailData.canvas.height)
-        thumbnailData.context.drawImage(vid, 0, 0, 200, thumbnailData.canvas.height)
-        thumbnailData.thumbnails[index] = thumbnailData.canvas.toDataURL('image/jpeg')
+        thumbnailData.context.fillRect(0, 0, 200, thumbnailData.canvas.height);
+        thumbnailData.context.drawImage(
+          vid,
+          0,
+          0,
+          200,
+          thumbnailData.canvas.height
+        );
+        thumbnailData.thumbnails[index] =
+          thumbnailData.canvas.toDataURL('image/jpeg');
       }
     }
   }
-  let videoWidth, videoHeight
-  function initThumbnails () {
-    const height = 200 / (videoWidth / videoHeight)
+  let videoWidth, videoHeight;
+  function initThumbnails() {
+    const height = 200 / (videoWidth / videoHeight);
     if (!isNaN(height)) {
-      thumbnailData.interval = safeduration / 300 < 5 ? 5 : safeduration / 300
-      thumbnailData.canvas.height = height
+      thumbnailData.interval = safeduration / 300 < 5 ? 5 : safeduration / 300;
+      thumbnailData.canvas.height = height;
     }
   }
 
@@ -900,7 +1022,7 @@
 
   // const isWindows = navigator.appVersion.includes('Windows')
   // let innerWidth, innerHeight
-  const menubarOffset = 0
+  const menubarOffset = 0;
   // $: calcMenubarOffset(innerWidth, innerHeight, videoWidth, videoHeight)
   // function calcMenubarOffset (innerWidth, innerHeight, videoWidth, videoHeight) {
   //   // outerheight resize and innerheight resize is mutual, additionally update on metadata and app state change
@@ -921,121 +1043,156 @@
   //   }
   // }
 
-  function toggleDropdown ({ target }) {
-    target.classList.toggle('active')
-    target.closest('.dropdown').classList.toggle('show')
+  function toggleDropdown({ target }) {
+    target.classList.toggle('active');
+    target.closest('.dropdown').classList.toggle('show');
   }
 
-  let completed = false
-  function checkCompletion () {
+  let completed = false;
+  function checkCompletion() {
     if (!completed && $settings.playerAutocomplete) {
-      checkCompletionByTime(currentTime, safeduration)
+      checkCompletionByTime(currentTime, safeduration);
     }
   }
 
-  function checkCompletionByTime (currentTime, safeduration) {
-    const fromend = Math.max(180, safeduration / 10)
-    if (safeduration && currentTime && video?.readyState && safeduration - fromend < currentTime) {
+  function checkCompletionByTime(currentTime, safeduration) {
+    const fromend = Math.max(180, safeduration / 10);
+    if (
+      safeduration &&
+      currentTime &&
+      video?.readyState &&
+      safeduration - fromend < currentTime
+    ) {
       if (media?.media?.episodes || media?.media?.nextAiringEpisode?.episode) {
-        if (media.media.episodes || media.media.nextAiringEpisode?.episode > media.episode) {
-          completed = true
-          anilistClient.alEntry(media)
+        if (
+          media.media.episodes ||
+          media.media.nextAiringEpisode?.episode > media.episode
+        ) {
+          completed = true;
+          anilistClient.alEntry(media);
         }
       }
     }
   }
-  const torrent = {}
-  client.on('stats', updateStats)
-  function updateStats ({ detail }) {
-    torrent.peers = detail.numPeers || 0
-    torrent.up = detail.uploadSpeed || 0
-    torrent.down = detail.downloadSpeed || 0
+  const torrent = {};
+  client.on('stats', updateStats);
+  function updateStats({ detail }) {
+    torrent.peers = detail.numPeers || 0;
+    torrent.up = detail.uploadSpeed || 0;
+    torrent.down = detail.downloadSpeed || 0;
   }
-  function checkError ({ target }) {
+  function checkError({ target }) {
     // video playback failed - show a message saying why
     switch (target.error?.code) {
       case target.error.MEDIA_ERR_ABORTED:
-        console.log('You aborted the video playback.')
-        break
+        console.log('You aborted the video playback.');
+        break;
       case target.error.MEDIA_ERR_NETWORK:
-        console.warn('A network error caused the video download to fail part-way.', target.error)
+        console.warn(
+          'A network error caused the video download to fail part-way.',
+          target.error
+        );
         toast.error('Video Network Error', {
-          description: 'A network error caused the video download to fail part-way. Dismiss this toast to reload the video.',
+          description:
+            'A network error caused the video download to fail part-way. Dismiss this toast to reload the video.',
           duration: 10000,
-          onDismiss: () => target.load()
-        })
-        break
+          onDismiss: () => target.load(),
+        });
+        break;
       case target.error.MEDIA_ERR_DECODE:
-        console.warn('The video playback was aborted due to a corruption problem or because the video used features your browser did not support.', target.error)
+        console.warn(
+          'The video playback was aborted due to a corruption problem or because the video used features your browser did not support.',
+          target.error
+        );
         toast.error('Video Decode Error', {
-          description: 'The video playback was aborted due to a corruption problem. Dismiss this toast to reload the video.',
+          description:
+            'The video playback was aborted due to a corruption problem. Dismiss this toast to reload the video.',
           duration: 10000,
-          onDismiss: () => target.load()
-        })
-        break
+          onDismiss: () => target.load(),
+        });
+        break;
       case target.error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-        if (target.error.message !== 'MEDIA_ELEMENT_ERROR: Empty src attribute') {
-          console.warn('The video could not be loaded, either because the server or network failed or because the format is not supported.', target.error)
+        if (
+          target.error.message !== 'MEDIA_ELEMENT_ERROR: Empty src attribute'
+        ) {
+          console.warn(
+            'The video could not be loaded, either because the server or network failed or because the format is not supported.',
+            target.error
+          );
           toast.error('Video Codec Unsupported', {
-            description: 'The video could not be loaded, either because the server or network failed or because the format is not supported. Try a different release by disabling Autoplay Torrents in RSS settings.',
-            duration: 30000
-          })
+            description:
+              'The video could not be loaded, either because the server or network failed or because the format is not supported. Try a different release by disabling Autoplay Torrents in RSS settings.',
+            duration: 30000,
+          });
         }
-        break
+        break;
       default:
-        console.warn('An unknown video playback error occurred.')
-        break
+        console.warn('An unknown video playback error occurred.');
+        break;
     }
   }
 
-  function handleSeekbarKey (e) {
+  function handleSeekbarKey(e) {
     if (e.key === 'ArrowLeft') {
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-      e.preventDefault()
-      rewind()
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      rewind();
     } else if (e.key === 'ArrowRight') {
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-      e.preventDefault()
-      forward()
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      forward();
     } else if (e.key === 'ArrowDown') {
-      e.stopPropagation()
-      e.stopImmediatePropagation()
-      e.preventDefault()
-      document.querySelector('[data-name=\'toggleFullscreen\']')?.focus()
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      document.querySelector("[data-name='toggleFullscreen']")?.focus();
     }
   }
 </script>
 
 <!-- <svelte:window bind:innerWidth bind:innerHeight /> -->
 <div
-  class='player w-full h-full d-flex flex-column overflow-hidden position-relative'
+  class="player w-full h-full d-flex flex-column overflow-hidden position-relative"
   class:pointer={miniplayer}
   class:miniplayer
   class:pip
-  class:immersed={immersed}
+  class:immersed
   class:buffering={src && buffering}
   class:fitWidth
   bind:this={container}
-  role='none'
+  role="none"
   on:pointermove={resetImmerse}
   on:keypress={resetImmerse}
   on:keydown={resetImmerse}
-  on:mouseleave={immersePlayer}>
+  on:mouseleave={immersePlayer}
+>
   {#if showKeybinds && !miniplayer}
-    <div class='position-absolute bg-tp w-full h-full z-50 font-size-12 p-20 d-flex align-items-center justify-content-center pointer' on:pointerup|self={() => (showKeybinds = false)} tabindex='-1' role='button'>
+    <div
+      class="position-absolute bg-tp w-full h-full z-50 font-size-12 p-20 d-flex align-items-center justify-content-center pointer"
+      on:pointerup|self={() => (showKeybinds = false)}
+      tabindex="-1"
+      role="button"
+    >
       <Keybinds let:prop={item} autosave={true} clickable={true}>
-        <div class:material-symbols-outlined={item?.type} class='bind' title={item?.desc} style='pointer-events: all !important;'>{item?.id || ''}</div>
+        <div
+          class:material-symbols-outlined={item?.type}
+          class="bind"
+          title={item?.desc}
+          style="pointer-events: all !important;"
+        >
+          {item?.id || ''}
+        </div>
       </Keybinds>
     </div>
   {/if}
   <!-- eslint-disable-next-line svelte/valid-compile -->
   <video
-    crossorigin='anonymous'
-    class='position-absolute h-full w-full'
+    crossorigin="anonymous"
+    class="position-absolute h-full w-full"
     style={`margin-top: ${menubarOffset}px`}
-    preload='auto'
+    preload="auto"
     {src}
     bind:videoHeight
     bind:videoWidth
@@ -1056,7 +1213,9 @@
     on:timeupdate={checkSkippableChapters}
     on:waiting={showBuffering}
     on:loadeddata={hideBuffering}
-    on:pause={() => { immersed = false }}
+    on:pause={() => {
+      immersed = false;
+    }}
     on:canplay={hideBuffering}
     on:playing={hideBuffering}
     on:loadedmetadata={hideBuffering}
@@ -1067,10 +1226,17 @@
     on:loadedmetadata={checkAudio}
     on:loadedmetadata={clearLoadInterval}
     on:loadedmetadata={loadAnimeProgress}
-    on:leavepictureinpicture={() => { pip = false }} />
+    on:leavepictureinpicture={() => {
+      pip = false;
+    }}
+  />
   {#if stats}
-    <div class='position-absolute top-0 bg-tp p-10 m-15 text-monospace rounded z-50'>
-      <button class='close' type='button' use:click={toggleStats}><span>×</span></button>
+    <div
+      class="position-absolute top-0 bg-tp p-10 m-15 text-monospace rounded z-50"
+    >
+      <button class="close" type="button" use:click={toggleStats}
+        ><span>×</span></button
+      >
       FPS: {stats.fps}<br />
       Presented frames: {stats.presented}<br />
       Dropped frames: {stats.dropped}<br />
@@ -1082,135 +1248,318 @@
       Name: {current.name || ''}
     </div>
   {/if}
-  <div class='top z-40 row'>
-    <div class='stats col-4 pl-20'>
-      <div class='font-weight-bold overflow-hidden text-truncate d-none d-md-block'>
+  <div class="top z-40 row">
+    <div class="stats col-4 pl-20">
+      <div
+        class="font-weight-bold overflow-hidden text-truncate d-none d-md-block"
+      >
         {#if media.title}{media.title}{/if}
       </div>
-      <div class='font-weight-normal overflow-hidden text-truncate font-size-16 text-muted d-none d-md-block'>
+      <div
+        class="font-weight-normal overflow-hidden text-truncate font-size-16 text-muted d-none d-md-block"
+      >
         {#if media.episode}Episode {media.episode}{/if}
         {#if media.episode && media.episodeTitle}{' - '}{/if}
         {#if media.episodeTitle}{media.episodeTitle}{/if}
       </div>
     </div>
-    <div class='d-flex col-4 justify-content-center'>
-      <span class='material-symbols-outlined'> people </span>
-      <span class='stats'>{torrent.peers || 0}</span>
-      <span class='material-symbols-outlined'> arrow_downward </span>
-      <span class='stats'>{fastPrettyBytes(torrent.down)}/s</span>
-      <span class='material-symbols-outlined'> arrow_upward </span>
-      <span class='stats'>{fastPrettyBytes(torrent.up)}/s</span>
+    <div class="d-flex col-4 justify-content-center">
+      <span class="material-symbols-outlined"> people </span>
+      <span class="stats">{torrent.peers || 0}</span>
+      <span class="material-symbols-outlined"> arrow_downward </span>
+      <span class="stats">{fastPrettyBytes(torrent.down)}/s</span>
+      <span class="material-symbols-outlined"> arrow_upward </span>
+      <span class="stats">{fastPrettyBytes(torrent.up)}/s</span>
     </div>
-    <div class='col-4' />
+    <div class="col-4" />
   </div>
-  <div class='middle d-flex align-items-center justify-content-center flex-grow-1 position-relative'>
+  <div
+    class="middle d-flex align-items-center justify-content-center flex-grow-1 position-relative"
+  >
     <!-- eslint-disable-next-line svelte/valid-compile -->
-    <div class='w-full h-full position-absolute toggle-fullscreen' on:dblclick={toggleFullscreen} on:click|self={() => { if (page === 'player') playPause(); page = 'player' }} />
+    <div
+      class="w-full h-full position-absolute toggle-fullscreen"
+      on:dblclick={toggleFullscreen}
+      on:click|self={() => {
+        if (page === 'player') playPause();
+        page = 'player';
+      }}
+    />
     <!-- eslint-disable-next-line svelte/valid-compile -->
-    <div class='w-full h-full position-absolute toggle-immerse d-none' on:dblclick={toggleFullscreen} on:click|self={toggleImmerse} />
-    <div class='w-full h-full position-absolute mobile-focus-target d-none' use:click={() => { page = 'player' }} />
-    <span class='material-symbols-outlined ctrl h-full align-items-center justify-content-end w-150 mw-full mr-auto' use:click={rewind}> fast_rewind </span>
-    <span class='material-symbols-outlined ctrl' data-name='playPause' use:click={playPause}> {ended ? 'replay' : paused ? 'play_arrow' : 'pause'} </span>
-    <span class='material-symbols-outlined ctrl h-full align-items-center w-150 mw-full ml-auto' use:click={forward}> fast_forward </span>
-    <div class='position-absolute bufferingDisplay' />
+    <div
+      class="w-full h-full position-absolute toggle-immerse d-none"
+      on:dblclick={toggleFullscreen}
+      on:click|self={toggleImmerse}
+    />
+    <div
+      class="w-full h-full position-absolute mobile-focus-target d-none"
+      use:click={() => {
+        page = 'player';
+      }}
+    />
+    <span
+      class="material-symbols-outlined ctrl h-full align-items-center justify-content-end w-150 mw-full mr-auto"
+      use:click={rewind}
+    >
+      fast_rewind
+    </span>
+    <span
+      class="material-symbols-outlined ctrl"
+      data-name="playPause"
+      use:click={playPause}
+    >
+      {ended ? 'replay' : paused ? 'play_arrow' : 'pause'}
+    </span>
+    <span
+      class="material-symbols-outlined ctrl h-full align-items-center w-150 mw-full ml-auto"
+      use:click={forward}
+    >
+      fast_forward
+    </span>
+    <div class="position-absolute bufferingDisplay" />
     {#if currentSkippable}
-      <button class='skip btn text-dark position-absolute bottom-0 right-0 mr-20 mb-5 font-weight-bold z-30' use:click={skip}>
+      <button
+        class="skip btn text-dark position-absolute bottom-0 right-0 mr-20 mb-5 font-weight-bold z-30"
+        use:click={skip}
+      >
         Skip {currentSkippable}
       </button>
     {/if}
   </div>
-  <div class='bottom d-flex z-40 flex-column px-20'>
-    <div class='w-full d-flex align-items-center h-20 mb-5 seekbar' tabindex='0' role='button' on:keydown={handleSeekbarKey}>
+  <div class="bottom d-flex z-40 flex-column px-20">
+    <div
+      class="w-full d-flex align-items-center h-20 mb-5 seekbar"
+      tabindex="0"
+      role="button"
+      on:keydown={handleSeekbarKey}
+    >
       <Seekbar
-        accentColor='var(--accent-color)'
-        class='font-size-20'
+        accentColor="var(--accent-color)"
+        class="font-size-20"
         length={safeduration}
         {buffer}
-        bind:progress={progress}
+        bind:progress
         on:seeking={handleMouseDown}
         on:seeked={handleMouseUp}
         chapters={sanitiseChapters(chapters, safeduration)}
         {getThumbnail}
       />
     </div>
-    <div class='d-flex'>
-      <span class='material-symbols-outlined ctrl' title='Play/Pause [Space]' data-name='playPause' use:click={playPause}> {ended ? 'replay' : paused ? 'play_arrow' : 'pause'} </span>
+    <div class="d-flex">
+      <span
+        class="material-symbols-outlined ctrl"
+        title="Play/Pause [Space]"
+        data-name="playPause"
+        use:click={playPause}
+      >
+        {ended ? 'replay' : paused ? 'play_arrow' : 'pause'}
+      </span>
       {#if hasLast}
-        <span class='material-symbols-outlined ctrl' title='Last [B]' use:click={playLast}> skip_previous </span>
+        <span
+          class="material-symbols-outlined ctrl"
+          title="Last [B]"
+          use:click={playLast}
+        >
+          skip_previous
+        </span>
       {/if}
       {#if hasNext}
-        <span class='material-symbols-outlined ctrl' title='Next [N]' use:click={playNext}> skip_next </span>
+        <span
+          class="material-symbols-outlined ctrl"
+          title="Next [N]"
+          use:click={playNext}
+        >
+          skip_next
+        </span>
       {/if}
-      <div class='d-flex w-auto volume'>
-        <span class='material-symbols-outlined ctrl' title='Mute [M]' data-name='toggleMute' use:click={toggleMute}> {muted ? 'volume_off' : 'volume_up'} </span>
-        <input class='ctrl h-full custom-range' type='range' min='0' max='1' step='any' data-name='setVolume' bind:value={volume} />
+      <div class="d-flex w-auto volume">
+        <span
+          class="material-symbols-outlined ctrl"
+          title="Mute [M]"
+          data-name="toggleMute"
+          use:click={toggleMute}
+        >
+          {muted ? 'volume_off' : 'volume_up'}
+        </span>
+        <input
+          class="ctrl h-full custom-range"
+          type="range"
+          min="0"
+          max="1"
+          step="any"
+          data-name="setVolume"
+          bind:value={volume}
+        />
       </div>
-      <div class='ts' class:mr-auto={playbackRate === 1}>{toTS(targetTime, safeduration > 3600 ? 2 : 3)} / {toTS(safeduration - targetTime, safeduration > 3600 ? 2 : 3)}</div>
+      <div class="ts" class:mr-auto={playbackRate === 1}>
+        {toTS(targetTime, safeduration > 3600 ? 2 : 3)} / {toTS(
+          safeduration - targetTime,
+          safeduration > 3600 ? 2 : 3
+        )}
+      </div>
       {#if playbackRate !== 1}
-        <div class='ts mr-auto'>x{playbackRate.toFixed(1)}</div>
+        <div class="ts mr-auto">x{playbackRate.toFixed(1)}</div>
       {/if}
-      <span class='material-symbols-outlined ctrl keybinds' title='Keybinds [`]' use:click={() => (showKeybinds = true)}> keyboard </span>
+      <span
+        class="material-symbols-outlined ctrl keybinds"
+        title="Keybinds [`]"
+        use:click={() => (showKeybinds = true)}
+      >
+        keyboard
+      </span>
       {#if 'audioTracks' in HTMLVideoElement.prototype && video?.audioTracks?.length > 1}
-        <div class='dropdown dropup with-arrow' use:click={toggleDropdown}>
-          <span class='material-symbols-outlined ctrl' title='Audio Tracks'>
+        <div class="dropdown dropup with-arrow" use:click={toggleDropdown}>
+          <span class="material-symbols-outlined ctrl" title="Audio Tracks">
             queue_music
           </span>
-          <div class='dropdown-menu dropdown-menu-left ctrl custom-radio p-10 pb-5 text-capitalize'>
+          <div
+            class="dropdown-menu dropdown-menu-left ctrl custom-radio p-10 pb-5 text-capitalize"
+          >
             {#each video.audioTracks as track}
-              <input name='audio-radio-set' type='radio' id='audio-{track.id}-radio' value={track.id} checked={track.enabled} />
-              <label for='audio-{track.id}-radio' use:click={() => selectAudio(track.id)} class='text-truncate pb-5'>
-                {(track.language || (!Object.values(video.audioTracks).some(track => track.language === 'eng' || track.language === 'en') ? 'eng' : track.label)) + (track.label ? ' - ' + track.label : '')}
+              <input
+                name="audio-radio-set"
+                type="radio"
+                id="audio-{track.id}-radio"
+                value={track.id}
+                checked={track.enabled}
+              />
+              <label
+                for="audio-{track.id}-radio"
+                use:click={() => selectAudio(track.id)}
+                class="text-truncate pb-5"
+              >
+                {(track.language ||
+                  (!Object.values(video.audioTracks).some(
+                    (track) =>
+                      track.language === 'eng' || track.language === 'en'
+                  )
+                    ? 'eng'
+                    : track.label)) + (track.label ? ' - ' + track.label : '')}
               </label>
             {/each}
           </div>
         </div>
       {/if}
       {#if 'videoTracks' in HTMLVideoElement.prototype && video?.videoTracks?.length > 1}
-        <div class='dropdown dropup with-arrow'>
-          <span class='material-symbols-outlined ctrl' title='Video Tracks'>
+        <div class="dropdown dropup with-arrow">
+          <span class="material-symbols-outlined ctrl" title="Video Tracks">
             playlist_play
           </span>
-          <div class='dropdown-menu dropdown-menu-left ctrl custom-radio p-10 pb-5 text-capitalize'>
+          <div
+            class="dropdown-menu dropdown-menu-left ctrl custom-radio p-10 pb-5 text-capitalize"
+          >
             {#each video.videoTracks as track}
-              <input name='video-radio-set' type='radio' id='video-{track.id}-radio' value={track.id} checked={track.selected} />
-              <label for='video-{track.id}-radio' use:click={() => selectVideo(track.id)} class='text-truncate pb-5'>
-                {(track.language || (!Object.values(video.videoTracks).some(track => track.language === 'eng' || track.language === 'en') ? 'eng' : track.label)) + (track.label ? ' - ' + track.label : '')}
+              <input
+                name="video-radio-set"
+                type="radio"
+                id="video-{track.id}-radio"
+                value={track.id}
+                checked={track.selected}
+              />
+              <label
+                for="video-{track.id}-radio"
+                use:click={() => selectVideo(track.id)}
+                class="text-truncate pb-5"
+              >
+                {(track.language ||
+                  (!Object.values(video.videoTracks).some(
+                    (track) =>
+                      track.language === 'eng' || track.language === 'en'
+                  )
+                    ? 'eng'
+                    : track.label)) + (track.label ? ' - ' + track.label : '')}
               </label>
             {/each}
           </div>
         </div>
       {/if}
       {#if subHeaders?.length}
-        <div class='subtitles dropdown dropup with-arrow' use:click={toggleDropdown}>
-          <span class='material-symbols-outlined ctrl' title='Subtitles [C]'>
+        <div
+          class="subtitles dropdown dropup with-arrow"
+          use:click={toggleDropdown}
+        >
+          <span class="material-symbols-outlined ctrl" title="Subtitles [C]">
             subtitles
           </span>
-          <div class='dropdown-menu dropdown-menu-right ctrl custom-radio p-10 pb-5 text-capitalize'>
-            <input name='subtitle-radio-set' type='radio' id='subtitle-off-radio' value='off' checked={subHeaders && subs?.current === -1} />
-            <label for='subtitle-off-radio' use:click={() => subs.selectCaptions(-1)} class='text-truncate pb-5'> OFF </label>
+          <div
+            class="dropdown-menu dropdown-menu-right ctrl custom-radio p-10 pb-5 text-capitalize"
+          >
+            <input
+              name="subtitle-radio-set"
+              type="radio"
+              id="subtitle-off-radio"
+              value="off"
+              checked={subHeaders && subs?.current === -1}
+            />
+            <label
+              for="subtitle-off-radio"
+              use:click={() => subs.selectCaptions(-1)}
+              class="text-truncate pb-5"
+            >
+              OFF
+            </label>
             {#each subHeaders as track}
               {#if track}
-                <input name='subtitle-radio-set' type='radio' id='subtitle-{track.number}-radio' value={track.numer} checked={track.number === subs.current} />
-                <label for='subtitle-{track.nubmer}-radio' use:click={() => subs.selectCaptions(track.number)} class='text-truncate pb-5'>
-                  {(track.language || (!Object.values(subs.headers).some(header => header.language === 'eng' || header.language === 'en') ? 'eng' : track.type)) + (track.name ? ' - ' + track.name : '')}
+                <input
+                  name="subtitle-radio-set"
+                  type="radio"
+                  id="subtitle-{track.number}-radio"
+                  value={track.numer}
+                  checked={track.number === subs.current}
+                />
+                <label
+                  for="subtitle-{track.nubmer}-radio"
+                  use:click={() => subs.selectCaptions(track.number)}
+                  class="text-truncate pb-5"
+                >
+                  {(track.language ||
+                    (!Object.values(subs.headers).some(
+                      (header) =>
+                        header.language === 'eng' || header.language === 'en'
+                    )
+                      ? 'eng'
+                      : track.type)) + (track.name ? ' - ' + track.name : '')}
                 </label>
               {/if}
             {/each}
-            <input type='text' inputmode='numeric' pattern='-?[0-9]*.?[0-9]*' step='0.1' bind:value={subDelay} on:click|stopPropagation class='form-control text-right form-control-sm' />
+            <input
+              type="text"
+              inputmode="numeric"
+              pattern="-?[0-9]*.?[0-9]*"
+              step="0.1"
+              bind:value={subDelay}
+              on:click|stopPropagation
+              class="form-control text-right form-control-sm"
+            />
           </div>
         </div>
       {/if}
       {#if 'PresentationRequest' in window && canCast && current}
-        <span class='material-symbols-outlined ctrl' title='Cast Video [D]' data-name='toggleCast' use:click={toggleCast}>
+        <span
+          class="material-symbols-outlined ctrl"
+          title="Cast Video [D]"
+          data-name="toggleCast"
+          use:click={toggleCast}
+        >
           {presentationConnection ? 'cast_connected' : 'cast'}
         </span>
       {/if}
       {#if 'pictureInPictureEnabled' in document}
-        <span class='material-symbols-outlined ctrl' title='Popout Window [P]' data-name='togglePopout' use:click={togglePopout}>
+        <span
+          class="material-symbols-outlined ctrl"
+          title="Popout Window [P]"
+          data-name="togglePopout"
+          use:click={togglePopout}
+        >
           {pip ? 'featured_video' : 'picture_in_picture'}
         </span>
       {/if}
-      <span class='material-symbols-outlined ctrl' title='Fullscreen [F]' data-name='toggleFullscreen' use:click={toggleFullscreen}>
+      <span
+        class="material-symbols-outlined ctrl"
+        title="Fullscreen [F]"
+        data-name="toggleFullscreen"
+        use:click={toggleFullscreen}
+      >
         {isFullscreen ? 'fullscreen_exit' : 'fullscreen'}
       </span>
     </div>
@@ -1233,7 +1582,8 @@
   :global(.deband-canvas) ~ video {
     opacity: 0;
   }
-  .fitWidth video, .fitWidth :global(.deband-canvas) {
+  .fitWidth video,
+  .fitWidth :global(.deband-canvas) {
     object-fit: cover !important;
   }
   .custom-range {
@@ -1261,7 +1611,7 @@
   .custom-range::-webkit-slider-runnable-track {
     height: var(--target-height);
     position: relative;
-        background: linear-gradient(var(--track-color) 0 0) scroll no-repeat center /
+    background: linear-gradient(var(--track-color) 0 0) scroll no-repeat center /
       100% calc(var(--track-height));
   }
 
@@ -1337,7 +1687,8 @@
     cursor: pointer !important;
   }
   .miniplayer .top,
-  .miniplayer .bottom, .miniplayer .skip {
+  .miniplayer .bottom,
+  .miniplayer .skip {
     display: none !important;
   }
   .miniplayer video {
@@ -1378,7 +1729,11 @@
     font-size: 2.8rem;
     padding: 1.5rem;
     display: flex;
-    font-variation-settings: 'FILL' 1, 'wght' 300, 'GRAD' 100, 'opsz' 64;
+    font-variation-settings:
+      'FILL' 1,
+      'wght' 300,
+      'GRAD' 100,
+      'opsz' 64;
   }
 
   .immersed {
@@ -1387,7 +1742,8 @@
 
   .immersed .middle .ctrl,
   .immersed .top,
-  .immersed .bottom, .immersed .skip {
+  .immersed .bottom,
+  .immersed .skip {
     opacity: 0;
   }
   :fullscreen .ctrl[data-name='toggleCast'] {
@@ -1481,11 +1837,25 @@
   }
 
   .bottom {
-    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.6) 25%, rgba(0, 0, 0, 0.4) 50%, rgba(0, 0, 0, 0.1) 75%, transparent);
+    background: linear-gradient(
+      to top,
+      rgba(0, 0, 0, 0.8),
+      rgba(0, 0, 0, 0.6) 25%,
+      rgba(0, 0, 0, 0.4) 50%,
+      rgba(0, 0, 0, 0.1) 75%,
+      transparent
+    );
     transition: 0.5s opacity ease 0.2s;
   }
   .top {
-    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.4) 25%, rgba(0, 0, 0, 0.2) 50%, rgba(0, 0, 0, 0.1) 75%, transparent);
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.8),
+      rgba(0, 0, 0, 0.4) 25%,
+      rgba(0, 0, 0, 0.2) 50%,
+      rgba(0, 0, 0, 0.1) 75%,
+      transparent
+    );
     transition: 0.5s opacity ease 0.2s;
   }
 
@@ -1505,7 +1875,7 @@
   }
 
   .h-20 {
-    height: 2rem
+    height: 2rem;
   }
 
   .bottom .ts {
@@ -1529,8 +1899,11 @@
       display: none !important;
     }
     @media (orientation: portrait) {
-      .top  {
-        padding-top: max(var(--safe-area-top), env(safe-area-inset-top, 0)) !important;
+      .top {
+        padding-top: max(
+          var(--safe-area-top),
+          env(safe-area-inset-top, 0)
+        ) !important;
       }
     }
     .middle .ctrl {
@@ -1552,5 +1925,4 @@
       background: hsla(209, 100%, 55%, 0.3);
     }
   }
-
 </style>

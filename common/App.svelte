@@ -4,8 +4,9 @@
   import { anilistClient } from '@/modules/anilist.js'
   import IPC from '@/modules/ipc.js'
 
-  export const page = writable('home')
+  export const page = writable('search')
   export const view = writable(null)
+  export const best_episodes_release = writable({});
   export async function handleAnime (anime) {
     view.set(null)
     view.set((await anilistClient.searchIDSingle({ id: anime })).data.Media)
@@ -27,6 +28,7 @@
   import Navbar from './components/Navbar.svelte'
 
   setContext('view', view)
+  setContext('best_episodes_release', best_episodes_release);
 </script>
 
 <div class='page-wrapper with-transitions bg-dark position-relative' data-sidebar-type='overlayed-all'>

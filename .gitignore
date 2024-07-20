@@ -1,6 +1,9 @@
 # OS Specific
 .DS_Store
 
+#data folder
+**/common/data/split
+
 # Build output
 **/dist/
 **/build/
@@ -15,3 +18,4 @@ node_modules
 **/git_modules/
 
 package-lock.json
+common/data/final_animes_miru.json
